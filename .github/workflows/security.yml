@@ -11,10 +11,15 @@ permissions:
   contents: read
 
 jobs:
-  govulncheck:
-    name: govulncheck
+  cargo-audit:
+    name: cargo-audit
     runs-on: ubuntu-latest
     steps:
-      - uses: golang/govulncheck-action@v1
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@v2
         with:
-          go-version-file: go.mod
+          tool: cargo-audit
+
+      - name: cargo-audit
+        run: cargo audit

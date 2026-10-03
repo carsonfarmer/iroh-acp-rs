@@ -10,32 +10,35 @@ permissions:
 
 jobs:
   test:
-    name: Test (Go ${{ matrix.go }})
+    name: Test (Rust ${{ matrix.rust }})
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        go: ["1.27", stable]
+        rust: [rust-version, stable]
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version: ${{ matrix.go }}
+      # rust-version is the oldest Rust that Cargo.toml says builds the crate.
+      - name: Install Rust
+        env:
+          RUST: ${{ matrix.rust }}
+        run: |
+          if [ "$RUST" = rust-version ]; then
+            RUST=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          fi
+          rustup toolchain install "$RUST" --profile minimal
+          rustup default "$RUST"
 
-      - name: Verify dependencies
-        run: go mod verify
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Check go mod tidy
-        run: go mod tidy -diff
-
+      # --locked fails if Cargo.lock does not match Cargo.toml.
       - name: Build
-        run: go build ./...
+        run: cargo build --locked --all-targets
 
-      # Includes the relay-only and built-binary end-to-end tests, which use
-      # the public n0 relays. The go command leaves dot directories out of
-      # ./..., so the spec suite, which checks the code against
-      # .regenerate/SPEC.md, is named. One command runs both packages at once.
+      # Includes the relay-only and built-binary end-to-end tests, which use the
+      # public n0 relays and are marked #[ignore], and the spec suite, which
+      # checks the code against .regenerate/SPEC.md.
       - name: Test
-        run: go test -race -shuffle=on -count=1 ./... ./.regenerate
+        run: cargo test --locked -- --include-ignored

@@ -1,12 +1,12 @@
 version: 2
 updates:
-  - package-ecosystem: gomod
+  - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
-    labels: [dependencies, go]
+    labels: [dependencies, rust]
     groups:
-      go-minor-patch:
+      cargo-minor-patch:
         update-types: [minor, patch]
 
   - package-ecosystem: github-actions
