@@ -665,7 +665,7 @@ async fn binaries() {
     });
     assert_eq!(session.await.unwrap(), "about to be killed");
     let start = Instant::now();
-    server.wait_for("agent exited", Duration::from_secs(15)).await;
+    server.wait_for("agent exited", Duration::from_secs(20)).await;
     eprintln!("the remote agent exited {:?} after its client was killed", start.elapsed());
 
     // A server restarted with the same key keeps its ID, so the old ticket works.

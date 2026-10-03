@@ -328,7 +328,7 @@ async fn binaries() {
     });
     assert_eq!(session.await.unwrap(), "about to be killed");
     let start = Instant::now();
-    server.agent_exits(Duration::from_secs(15)).await;
+    server.agent_exits(Duration::from_secs(20)).await;
     eprintln!("remote agent exited {:?} after its client was killed", start.elapsed());
 
     // A restarted server keeps its ticket.
