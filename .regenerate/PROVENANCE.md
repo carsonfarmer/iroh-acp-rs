@@ -10,51 +10,52 @@ reproduce.
 
 ## The reference implementation
 
-The code was last changed at commit `0fbc125` (2026-09-29). The commits after it add
-`.regenerate/` and leave the library and the commands as they were.
+The reference is a port, not a blind rebuild. The agent that wrote it read the Go
+implementation, its tests and the shared `SPEC.md`, and the history before the port
+is iroh-acp-go's.
 
 | Item | Value | Source |
 | --- | --- | --- |
-| Built | 2026-09-25 to 2026-09-29, first commit `d29e505` | `git log` |
-| Model | Claude Opus 5.5, named in the trailer of all 8 commits | commit trailers |
-| Harness | Claude Code, one long session | session log, local only |
-| Design interview | The [grill-me](https://github.com/mattpocock/skills/tree/main/skills/productivity/grill-me) skill, run before the build | session log, local only. No question or answer was kept. |
-| Go skills | [`samber/cc-skills-golang`](https://github.com/samber/cc-skills-golang) | session log, local only. Commit SHA at build time: **unknown**. |
-| Go toolchain and dependencies | pinned in `go.mod` and `go.sum` | `go.mod`, `go.sum` |
-| Brief | not published | |
-| Lint | golangci-lint, config in `.golangci.yml` | `.github/workflows/lint.yml` |
-| Vulnerability scan | govulncheck, weekly and on every push | `.github/workflows/security.yml` |
+| Built | 2026-10-02, from iroh-acp-go at commit `e3f5bd8` | `git log` |
+| Brief | Port iroh-acp-go to Rust on the official ACP crate, in fewer lines of code | session log, local only |
+| Model | Claude Opus 5.5, named in the commit trailers | commit trailers |
+| Harness | Claude Code, the same session that maintained the Go implementation | session log, local only |
+| Rust toolchain and dependencies | pinned in `Cargo.toml` and `Cargo.lock` | `Cargo.toml`, `Cargo.lock` |
+| Format and lint | rustfmt and clippy, config in `rustfmt.toml` and the `[lints]` table | `.github/workflows/lint.yml` |
+| Vulnerability scan | cargo-audit, weekly and on every push | `.github/workflows/security.yml` |
 | Skill versions, temperature, other model settings | **unknown** | not recorded |
 
 ## Changes during the build
 
-Requests made during the build session changed the design. They added the access
-control hook (`Serve` takes an `allow` function), the persistent key files, the 10
-second idle timeout and the CI setup. All of these landed before the first commit, so
-the history does not show them one by one. The requests are in the session log only.
+The port changed the shared spec. `SPEC.md` gained the Rust inputs in section 2, the
+Rust declarations in section 5 and the Rust usage texts in sections 6 and 7.
+`DECISIONS.md` gained D21 to D23. tokio, tokio-util and iroh-tickets became direct
+dependencies, as iroh and agent-client-protocol leave the runtime, the stream
+adapters and the ticket type to them.
+
+Two bugs turned up along the way, and both became lines in the spec:
+
+- An early port served a stream that a rejected peer had opened before `allow`
+  returned. noq, the QUIC library under iroh, still yields such a stream. D8 covers
+  it, and iroh-acp-go gained a test for it in commit `e3f5bd8`.
+- Run against a go-iroh server, the client waited 9 seconds for the server to answer
+  its close. The client now waits at most a second. D23 and section 7 cover it.
 
 ## Upstream problems found during the build
 
-| Problem | Fix | Workaround removed |
-| --- | --- | --- |
-| acp-go issue 11 | acp-go pull request 12, merged | commit `40819dd` |
-| go-iroh issue 25 | go-iroh v0.2.2 | commit `0fbc125` |
+None in iroh or agent-client-protocol.
 
 ## Regeneration ledger
 
 One row per regeneration attempt, including the ones that failed. A failed row is the
-most useful kind, because it points at a gap in `SPEC.md`.
-
-Fill in a row after each check of a rebuild. The first two runs used `verify.sh`, a
-script that the spec suite in this directory has since replaced.
+most useful kind, because it points at a gap in `SPEC.md`. Rebuilds of the Go
+implementation are in iroh-acp-go's ledger.
 
 | Date | Mode | Model and harness | Inputs | Result | Spec gaps found | Spec changes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2026-09-29 | blind | `claude-sonnet-5-5` as a subagent in Claude Code, about 11 minutes | The draft `SPEC.md`, `DECISIONS.md` and `PROMPT.md` before any edit from this run, the `0fbc125` pins, an isolated module cache. No `reference-1` tag existed yet. | `verify.sh`: 34 passed, 0 failed, 2 skipped (golangci-lint and govulncheck were not installed). Size 95, 49 and 44 code lines. Two runs of the killed-client check took about 15 and about 10 seconds. | Usage line: section 9 said the text starts with `usage: acp-server` and section 6 put a timestamp first. `Serve`: return value on `ctx` done, and whether it shuts the endpoint down. `ConnectAgent` hides the reject reason and `Dial` shows it. `LoadKey` error for a bad key length. | Sections 4, 5 and 9 of `SPEC.md`. The next run used them. |
-| 2026-09-29 | blind | `claude-sonnet-5-5` as a subagent in Claude Code, about 16 minutes | `SPEC.md`, `DECISIONS.md` and `PROMPT.md` with the changes from the run above, not yet committed. The `0fbc125` pins, an isolated module cache. No `reference-1` tag existed yet. The agent saw the name of the `ref` directory next to its workspace in a listing, and says it did not open it. | `verify.sh`: 30 passed, 0 failed, 2 skipped (golangci-lint and govulncheck were not installed). Since the run above, one `go.mod` comparison replaces five version checks. Size 93, 49 and 43 code lines. The killed-client check took about 15 seconds. The agent's own tests failed once in six full runs, when a dial through the relays timed out after about 11 seconds. | `Serve`: whether it returns when `ep` closes first, what happens to open connections when `ctx` is done, and the error when the router cannot start. Arguments after the `acp-client` ticket. The agent also misread `Bind`, taking `iroh.WithALPNs` to replace `acp/1` when it adds to it. | Sections 5 and 7 of `SPEC.md`. Not yet rerun. |
 
 - **Mode** is `blind` or `guided`, as [`README.md`](README.md) defines them.
 - **Inputs** names the commit exported as the reference, the commit of `SPEC.md`,
   `DECISIONS.md` and `PROMPT.md` that the run used, and the dependency pins.
 - **Result** says whether the rebuild's own tests and the spec suite passed, names
-  any that failed, and gives the line counts from `TestSize`.
+  any that failed, and gives the line counts from the `size` test.

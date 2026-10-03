@@ -1,14 +1,13 @@
-# iroh-acp-go
+# iroh-acp-rs
 
-[![Test](https://github.com/carsonfarmer/iroh-acp-go/actions/workflows/test.yml/badge.svg)](https://github.com/carsonfarmer/iroh-acp-go/actions/workflows/test.yml)
-[![Lint](https://github.com/carsonfarmer/iroh-acp-go/actions/workflows/lint.yml/badge.svg)](https://github.com/carsonfarmer/iroh-acp-go/actions/workflows/lint.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/carsonfarmer/iroh-acp-go.svg)](https://pkg.go.dev/github.com/carsonfarmer/iroh-acp-go)
-[![Regenerative software](https://img.shields.io/badge/regenerative-software-4f6fd8)](https://github.com/carsonfarmer/iroh-acp-go/blob/main/.regenerate/README.md)
+[![Test](https://github.com/carsonfarmer/iroh-acp-rs/actions/workflows/test.yml/badge.svg)](https://github.com/carsonfarmer/iroh-acp-rs/actions/workflows/test.yml)
+[![Lint](https://github.com/carsonfarmer/iroh-acp-rs/actions/workflows/lint.yml/badge.svg)](https://github.com/carsonfarmer/iroh-acp-rs/actions/workflows/lint.yml)
+[![Regenerative software](https://img.shields.io/badge/regenerative-software-4f6fd8)](https://github.com/carsonfarmer/iroh-acp-rs/blob/main/.regenerate/README.md)
 
 Run an [Agent Client Protocol](https://agentclientprotocol.com) (ACP) agent on one
 machine and use it from an editor on another, peer to peer over
-[iroh](https://github.com/tmc/go-iroh). There are no open ports, no VPN and no server in
-the middle.
+[iroh](https://github.com/n0-computer/iroh). There are no open ports, no VPN and no
+server in the middle.
 
 ```mermaid
 flowchart LR
@@ -27,10 +26,16 @@ flowchart LR
   style theirs fill:none,stroke:#8b93a3,stroke-dasharray:5 5
 ```
 
-It is two small binaries and a Go library, built almost entirely from
-[go-iroh](https://github.com/tmc/go-iroh) and [acp-go](https://github.com/ironpark/acp-go).
-The library is under 100 lines of code, and each binary is under 50.
-The repository also keeps what an agent needs to write that code again: a
+It is two small binaries and a Rust library, built almost entirely from
+[iroh](https://github.com/n0-computer/iroh) and
+[agent-client-protocol](https://github.com/agentclientprotocol/rust-sdk), the official
+Rust implementation of ACP. The library is under 100 lines of code, and each binary is
+under 50.
+
+It is a port of [iroh-acp-go](https://github.com/carsonfarmer/iroh-acp-go). The two
+share one spec, speak the same protocol and read the same key files, so a Go client
+works with a Rust server and the other way round. The repository also keeps what an
+agent needs to write the code again: a
 [spec, a decision log, a prompt and the tests that judge the result](.regenerate/README.md).
 
 ## Why
@@ -72,49 +77,47 @@ connection, so the editor still just launches a local command: `acp-client`.
 
 ## Install
 
-Needs Go 1.27. With `GOTOOLCHAIN=auto`, the default, Go fetches it on demand.
+Needs a Rust toolchain no older than the `rust-version` in `Cargo.toml`, on macOS or
+Linux.
 
 ```bash
-go install github.com/carsonfarmer/iroh-acp-go/cmd/...@latest
+cargo install --locked --git https://github.com/carsonfarmer/iroh-acp-rs
 ```
 
 This installs `acp-server` and `acp-client`.
 
 ## Quick start
 
-To try it without a real agent, use acp-go's example agent and interactive client:
+To try it without a real agent, use the echo agent from this repository's tests. It
+answers each prompt with its own text.
 
 ```bash
-go build -o bin/ ./cmd/... github.com/ironpark/acp-go/examples/agent github.com/ironpark/acp-go/examples/client
+cargo build --release --examples
 ```
 
 1. On the machine with the editor, print the client's ID:
 
    ```bash
-   bin/acp-client
+   target/release/acp-client
    ```
 
 2. On the machine with the agent, start the server and allow that ID. It prints a
    ticket:
 
    ```bash
-   bin/acp-server -allow <client-id> bin/agent
+   target/release/acp-server -allow <client-id> target/release/examples/echo
    ```
 
-3. Back on the editor's machine, connect with the example client. It spawns
-   `acp-client <ticket>` as if that were the agent:
+3. Back on the editor's machine, send the agent one ACP message, the way an editor
+   would:
 
    ```bash
-   bin/client bin/acp-client <ticket>
+   echo '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":1}}' |
+     target/release/acp-client <ticket>
    ```
 
-Try `refactor the parser`. The remote agent does four things, and every one of those
-calls crosses iroh:
-
-- streams a plan,
-- runs `go version` in a terminal on *your* machine,
-- reads files through your client,
-- asks your permission before a change.
+The agent's answer comes back across iroh. Then stdin closes, so the agent and
+`acp-client` both exit, and the server logs `agent exited: exit status: 0`.
 
 ## Use a real agent from Zed
 
@@ -143,15 +146,18 @@ Any other ACP client that launches agents from a command and arguments is set up
 same way.
 
 The agent runs on the server's machine, so it reads and edits that machine's files.
-ACP clients that serve `fs/*` and `terminal/*` requests, like acp-go's example client,
-handle those on the editor's side.
+ACP clients that serve `fs/*` and `terminal/*` requests handle those on the editor's
+side.
 
 ## Commands
+
+The flags follow Go's syntax, as in iroh-acp-go: `-key file`, `-key=file` and
+`--key file` all work.
 
 ### acp-server
 
 ```
-acp-server [-key file] -allow <client-id> [-allow <client-id> ...] <agent-command> [args...]
+acp-server [-key file] -allow <client-id> [-allow ...] <agent-command> [args...]
 ```
 
 | Flag | Default | Meaning |
@@ -173,44 +179,43 @@ acp-client [-key file] <ticket>   # bridge stdio to the agent at ticket
 | --- | --- | --- |
 | `-key` | `<config dir>/iroh-acp/client.key` | The client's key file. It is created if it's missing. |
 
-`<config dir>` is Go's [`os.UserConfigDir`](https://pkg.go.dev/os#UserConfigDir):
+`<config dir>` is the one iroh-acp-go uses:
 
 - `~/Library/Application Support` on macOS,
-- `$XDG_CONFIG_HOME` or `~/.config` on Linux,
-- `%AppData%` on Windows.
+- `$XDG_CONFIG_HOME` or `~/.config` on Linux.
 
 Give each machine its own client key.
 
 ## Library
 
-`github.com/carsonfarmer/iroh-acp-go` (package `irohacp`) gives acp-go agents and
-clients the same transport, without subprocesses:
+The `iroh_acp` crate gives agent-client-protocol agents and clients the same
+transport, without subprocesses:
 
-```go
+```rust
 // Serve an agent to one client.
-sk, _ := irohacp.LoadKey("server.key")
-ep, _ := irohacp.Bind(ctx, iroh.WithSecretKey(sk))
-fmt.Println(endpointticket.Encode(ep.Addr()))
-go irohacp.ServeAgent(ctx, ep, irohacp.AllowIDs(clientID), func(c *acp1.AgentSideConnection) acp1.Agent {
-	return &myAgent{client: c}
-})
+let key = iroh_acp::load_key("server.key")?;
+let ep = iroh_acp::builder().secret_key(key).bind().await?;
+println!("{}", EndpointTicket::new(ep.addr()));
+let allow = iroh_acp::allow_ids(vec![client_id]);
+tokio::spawn(async move { iroh_acp::serve_agent(&ep, allow, my_agent).await });
 
 // Elsewhere: connect to it.
-agent, _ := irohacp.ConnectAgent(ctx, clientEp, ticket, newClient)
-defer agent.Close()
+let transport = iroh_acp::connect_agent(&client_ep, &ticket).await?;
+Client.builder().connect_with(transport, async |cx| { /* ... */ }).await?;
 ```
 
-| Function | What it does |
+| Item | What it does |
 | --- | --- |
-| `Bind(ctx, opts...)` | Binds an iroh endpoint for ACP: ALPN `acp/1`, the n0 relays, a 10s idle timeout. `opts` override these, for example to use your own relays. |
-| `LoadKey(path)` | Loads a secret key, creating and saving one on first use. |
-| `Dial(ctx, ep, ticket)` | Opens an ACP stream to a ticket, as a `net.Conn` with `CloseWrite`. |
-| `Serve(ctx, ep, allow, handle)` | Calls `handle` with each ACP stream from a peer that `allow` accepts. |
-| `AllowIDs(ids...)` | The usual `allow`: accept exactly these endpoint IDs. |
-| `ServeAgent(ctx, ep, allow, newAgent)` | `Serve` with a new acp-go agent per stream. |
-| `ConnectAgent(ctx, ep, ticket, newClient)` | `Dial` plus an acp-go client connection. |
+| `builder()` | An iroh endpoint builder for ACP: the n0 relays and a 10s idle timeout. Change it like any iroh builder, for example to use your own relays. |
+| `load_key(path)` | Loads a secret key, creating and saving one on first use. |
+| `key_path(name)` | The default path of the key file `name`, in the config directory. |
+| `dial(ep, ticket)` | Opens an ACP stream to a ticket, as iroh's send and receive halves. Finishing the send half closes only that side. |
+| `serve(ep, allow, handle)` | Calls `handle` with each ACP stream from a peer that `allow` accepts. |
+| `allow_ids(ids)` | The usual `allow`: accept exactly these endpoint IDs. |
+| `serve_agent(ep, allow, new_agent)` | `serve` with a new agent from `new_agent` per stream. |
+| `connect_agent(ep, ticket)` | `dial`, wrapped as a transport for an agent-client-protocol client. |
 
-`allow` is a `func(key.EndpointID) bool`, so any other access policy is one function
+`allow` is any `Fn(EndpointId) -> bool`, so any other access policy is one closure
 away.
 
 ## Security model
@@ -230,27 +235,32 @@ away.
 ## Development
 
 ```bash
-go test -race ./...     # all the tests, including relay-only and built-binary tests
-go test -short ./...    # loopback only, no network
-golangci-lint run       # the configuration is in .golangci.yml
+cargo test -- --include-ignored             # all the tests, including relay-only and built-binary tests
+cargo test                                  # loopback only, no network
+cargo clippy --all-targets -- -D warnings
+cargo fmt --check
 ```
 
-The tests use only the exported API and the built binaries. They never touch your
-real key files.
+The tests use only the public API and the built binaries. They never touch your real
+key files.
 
-- `TestServeAgentConnectAgent` runs the library over direct loopback and over the n0
-  relays only. It checks two concurrent agents and a rejected stranger.
-- `TestLoadKey` checks that a key file is created with mode `0600` and loads the same
-  key again.
-- `TestBinaries` builds `acp-server`, `acp-client` and acp-go's echo agent, then drives
-  `acp-client` the way an editor does. It covers:
+- `serve_agent_connect_agent_direct` and `serve_agent_connect_agent_relay_only` run
+  the library over direct loopback and over the n0 relays only. They check two
+  concurrent agents and a rejected stranger.
+- `serve_rejects_queued_stream` checks that a stream a stranger opened before `allow`
+  turned it down is never served.
+- `load_key` and `key_path` check that a key file is created with mode `0600`, loads
+  the same key again, and lives in the config directory.
+- `client_prints_its_id` and `usage_errors` run the binaries without a network.
+- `binaries` runs `acp-server` with the echo agent, then drives `acp-client` the way
+  an editor does. It covers:
   - clean shutdown,
   - a client that isn't allowed,
   - a client killed with SIGKILL, whose agent must exit within 15s,
   - a server restart that keeps the old ticket working.
 
-CI runs these tests, the spec suite described below, golangci-lint and govulncheck on
-every push and pull request. Dependabot keeps Go modules and actions up to date.
+CI runs these tests, the spec suite described below, clippy, rustfmt and cargo-audit
+on every push and pull request. Dependabot keeps crates and actions up to date.
 Coding agents should read [`AGENTS.md`](AGENTS.md) first.
 
 ## Regenerating this project
@@ -262,13 +272,13 @@ writes the implementation from them. This repository keeps those assets in
 [`.regenerate/`](.regenerate), apart from the project:
 
 - [`SPEC.md`](.regenerate/SPEC.md) says what the program must do, down to the API and
-  the log lines.
+  the log lines. iroh-acp-go holds the same file.
 - [`DECISIONS.md`](.regenerate/DECISIONS.md) says why the design is the way it is.
 - [`PROMPT.md`](.regenerate/PROMPT.md) is the prompt for the agent that rebuilds it.
 - The spec suite next to them checks an implementation against `SPEC.md`: its
-  exported API, its flags, its behavior on the wire and in the binaries, and its
-  size. CI runs it on this code too, so the code and the spec stay in step. Run it
-  with `go test ./.regenerate`, because `./...` leaves out dot directories.
+  public API, its flags, its behavior on the wire and in the binaries, and its size.
+  CI runs it on this code too, so the code and the spec stay in step. `cargo test`
+  runs it with the other tests, and `cargo test --test spec` runs it alone.
 
 To try a rebuild, follow [`.regenerate/README.md`](.regenerate/README.md). Each run,
 passing or not, goes in the ledger in [`PROVENANCE.md`](.regenerate/PROVENANCE.md).
@@ -278,13 +288,14 @@ passing or not, goes in the ledger in [`PROVENANCE.md`](.regenerate/PROVENANCE.m
 - A client that is killed leaves its agent running for 10 to 15s, until the connection
   times out.
 - By default, peers that can't connect directly use n0's public relays. For production,
-  pass your own relay configuration to `Bind`.
+  give `builder()` your own relay configuration.
+- It builds only on Unix, as the key files rely on Unix file modes.
 
 ## Acknowledgements
 
-- [go-iroh](https://github.com/tmc/go-iroh) by Travis Cline, a Go port of
-  [iroh](https://github.com/n0-computer/iroh) by n0.
-- [acp-go](https://github.com/ironpark/acp-go) by ironpark.
+- [iroh](https://github.com/n0-computer/iroh) by n0.
+- [agent-client-protocol](https://github.com/agentclientprotocol/rust-sdk), the
+  official Rust SDK for ACP.
 - The [Agent Client Protocol](https://agentclientprotocol.com) by Zed Industries.
 
 ## License
