@@ -1,4 +1,3 @@
-/bin/
+/target
 *.key
-coverage.out
 .DS_Store
