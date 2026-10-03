@@ -53,6 +53,7 @@ implementation are in iroh-acp-go's ledger.
 
 | Date | Mode | Model and harness | Inputs | Result | Spec gaps found | Spec changes |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-02 | blind | Claude Sonnet 5.5 (`claude-sonnet-5-5`) as a Claude Code subagent, about 20 minutes. The harness also gave it iroh-acp-go's `AGENTS.md` and recent commit subjects, and its shell started in the iroh-acp-go checkout. It reports reading no code outside its workspace and the dependency sources. | Reference, `SPEC.md`, `DECISIONS.md`, `PROMPT.md` and pins at `23115e7` | Passed. Its own tests: 32 of 32, with the relay tests. Spec suite: 12 of 12. Lines of code: library 95, `acp-server` 48, `acp-client` 36. | None that failed. It listed its choices where the spec leaves things open: `-` and `--` on their own (section 6), and what dropping `serve` does to open connections (section 11). | None |
 
 - **Mode** is `blind` or `guided`, as [`README.md`](README.md) defines them.
 - **Inputs** names the commit exported as the reference, the commit of `SPEC.md`,
